@@ -122,6 +122,7 @@ def get_data_model_1(num_samples):
     mixture_weights, means, covariances = get_parameters_model_1()
     samples_per_component = generate_samples(num_samples, mixture_weights, means, covariances)
     all_samples = np.concatenate(samples_per_component)
+    np.random.shuffle(all_samples)
 
     return all_samples, samples_per_component
 
@@ -140,6 +141,7 @@ def get_data_model_2(num_samples):
     mixture_weights, means, covariances = get_parameters_model_2()
     samples_per_component = generate_samples(num_samples, mixture_weights, means, covariances)
     all_samples = np.concatenate(samples_per_component)
+    np.random.shuffle(all_samples)
 
     return all_samples, samples_per_component
 
@@ -158,6 +160,7 @@ def get_data_model_3(num_samples):
     mixture_weights, means, covariances = get_parameters_model_3()
     samples_per_component = generate_samples(num_samples, mixture_weights, means, covariances)
     all_samples = np.concatenate(samples_per_component)
+    np.random.shuffle(all_samples)
 
     return all_samples, samples_per_component
 
