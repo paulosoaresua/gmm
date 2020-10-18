@@ -108,16 +108,17 @@ def get_parameters_model_3():
     return mixture_weights, means, covariances
 
 
-def get_data_model_1(num_samples):
+def get_data_model_1(num_samples, seed=42):
     """
     Generates samples from a 2D GMM with 3 separable components.
 
     :param num_samples: number of samples to generate
+    :param seed: random seed
     :return: a tuple containing all the samples generated and a list of samples per component.
     """
 
-    random.seed(42)
-    np.random.seed(42)
+    random.seed(seed)
+    np.random.seed(seed)
 
     mixture_weights, means, covariances = get_parameters_model_1()
     samples_per_component = generate_samples(num_samples, mixture_weights, means, covariances)
@@ -127,16 +128,17 @@ def get_data_model_1(num_samples):
     return all_samples, samples_per_component
 
 
-def get_data_model_2(num_samples):
+def get_data_model_2(num_samples, seed=42):
     """
     Generates samples from a 2D GMM with 4 components with 3 overlapping ones.
 
     :param num_samples: number of samples to generate
+    :param seed: random seed
     :return: a tuple containing all the samples generated and a list of samples per component.
     """
 
-    random.seed(42)
-    np.random.seed(42)
+    random.seed(seed)
+    np.random.seed(seed)
 
     mixture_weights, means, covariances = get_parameters_model_2()
     samples_per_component = generate_samples(num_samples, mixture_weights, means, covariances)
@@ -146,16 +148,17 @@ def get_data_model_2(num_samples):
     return all_samples, samples_per_component
 
 
-def get_data_model_3(num_samples):
+def get_data_model_3(num_samples, seed=42):
     """
     Generates samples from a 2D GMM with 8 non-overlapping components organized as a ring.
 
     :param num_samples: number of samples to generate
+    :param seed: random seed
     :return: a tuple containing all the samples generated and a list of samples per component.
     """
 
-    random.seed(42)
-    np.random.seed(42)
+    random.seed(seed)
+    np.random.seed(seed)
 
     mixture_weights, means, covariances = get_parameters_model_3()
     samples_per_component = generate_samples(num_samples, mixture_weights, means, covariances)
@@ -165,97 +168,8 @@ def get_data_model_3(num_samples):
     return all_samples, samples_per_component
 
 
-def plot_true_gmm(samples_per_component):
-    """
-    Plots the samples colored by the components they belong to.
-
-    :param samples_per_component: list of samples per component.
-    :return:
-    """
-
-    for samples in samples_per_component:
-        plt.scatter(samples[:, 0], samples[:, 1], s=1)
 
 
-def plot_samples(samples):
-    """
-    Plots samples.
-
-    :param samples: list of samples.
-    :return:
-    """
-
-    plt.scatter(samples[:, 0], samples[:, 1], s=1)
 
 
-def plot_ellipse(mean, covariance, ax, n_std=3.0):
-    """
-    Plots a 2D normal distribution contour.
 
-    :param mean: mean of the normal distribution.
-    :param covariance: covariance of the normal distribution.
-    :param ax: axis of the plot where the ellipse should be drawn.
-    :param n_std: scaling factor. How wide the ellipse is in terms of number of standard deviations.
-    :return:
-    """
-
-    pearson = covariance[0, 1] / np.sqrt(covariance[0, 0] * covariance[1, 1])
-
-    ell_radius_x = np.sqrt(1 + pearson)
-    ell_radius_y = np.sqrt(1 - pearson)
-    ellipse = Ellipse((0, 0), width=ell_radius_x * 2, height=ell_radius_y * 2, facecolor='none', edgecolor='red')
-
-    scale_x = np.sqrt(covariance[0, 0]) * n_std
-    mean_x = mean[0]
-    scale_y = np.sqrt(covariance[1, 1]) * n_std
-    mean_y = mean[1]
-
-    transf = transforms.Affine2D() \
-        .rotate_deg(45) \
-        .scale(scale_x, scale_y) \
-        .translate(mean_x, mean_y)
-
-    ellipse.set_transform(transf + ax.transData)
-    ax.add_patch(ellipse)
-
-
-def save_plots_from_models(num_samples, output_dir):
-    """
-    Generates data, plots it and save to a file for each one of the 3 models defined.
-
-    :param num_samples: number of samples to generate.
-    :param output_dir: directory where the images must be saved.
-    :return:
-    """
-
-    # Configure de plots to have high quality for latex documents.
-    TexFigure.configure_plots()
-    tex_figure = TexFigure(output_dir)
-
-    # Get the parameters of each model so we can draw an ellipse around the true Gaussians.
-    parameters_per_model = [get_parameters_model_1(), get_parameters_model_2(), get_parameters_model_3()]
-
-    # Get sampled data for each one of the models so we can plot them.
-    samples_per_model = [[], [], []]
-    samples_per_model_per_component = [[], [], []]
-    (samples_per_model[0], samples_per_model_per_component[0]) = get_data_model_1(num_samples)
-    (samples_per_model[1], samples_per_model_per_component[1]) = get_data_model_2(num_samples)
-    (samples_per_model[2], samples_per_model_per_component[2]) = get_data_model_3(num_samples)
-
-    for m in range(3):
-        tex_figure.new_figure()
-        plot_true_gmm(samples_per_model_per_component[m])
-        # Plot an ellipse around the true Gaussian for each component of the GMM defined by the model.
-        mixture_weights, means, covariances = parameters_per_model[m]
-        num_components = len(mixture_weights)
-        for component in range(num_components):
-            plot_ellipse(means[component], covariances[component], plt.gca(), 2)
-        tex_figure.save_image('samples_true_gmm_model_{}.pdf'.format(m + 1))
-
-        tex_figure.new_figure()
-        plot_samples(samples_per_model[m])
-        tex_figure.save_image('samples_model_{}.pdf'.format(m + 1))
-
-
-if __name__ == '__main__':
-    save_plots_from_models(1000, './images')

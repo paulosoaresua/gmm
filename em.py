@@ -2,24 +2,26 @@ import numpy as np
 from scipy.stats import dirichlet, multivariate_normal
 from data_generation import *
 from matplotlib.colors import to_rgb
+from tqdm import tqdm
 
 CONVERGENCE_ERROR = 10E-5
 MOVING_AVERAGE_WINDOW = 3
 
-def random_initialization(data, num_components, random_state=None):
+
+def random_initialization(data, num_components, seed=None):
     """
     Initializes parameters randomly.
 
     :param data: observed data
     :param num_components: number of components
-    :param random_state: random seed
+    :param seed: random seed
     :return:
     """
 
     dim = data.shape[1]
     num_points = data.shape[0]
     alpha = np.ones(num_components)
-    mixture_weights = dirichlet.rvs(alpha, size=1, random_state=random_state)[0]
+    mixture_weights = dirichlet.rvs(alpha, size=1, random_state=seed)[0]
     sample_indices = np.random.choice(num_points, size=num_components, replace=False)
     means = [data[idx] for idx in sample_indices]
     covariances = [np.diag(np.random.rand(dim)) for _ in range(num_components)]
@@ -95,12 +97,13 @@ def update_parameters(data, curr_mixture_weights, curr_means, curr_covariances, 
     mixture_weights = np.sum(responsibilities, axis=0) / num_points
     means = []
     covariances = []
+    num_resets = 0
     for component in range(num_components):
         n_k = np.sum(responsibilities[:, component])
         if n_k == 0:
             new_mean = data[np.random.randint(num_points)]
             new_covariance = np.diag(data_range)
-            print("Restart")
+            num_resets += 1
         else:
             new_mean = np.sum(responsibilities[:, component][:, None] * data, axis=0) / n_k
             new_covariance = np.zeros((dim, dim))
@@ -113,16 +116,16 @@ def update_parameters(data, curr_mixture_weights, curr_means, curr_covariances, 
         means.append(step_size * new_mean + (1 - step_size) * curr_means[component])
         covariances.append(step_size * new_covariance + (1 - step_size) * curr_covariances[component])
 
-    return mixture_weights, means, covariances
+    return mixture_weights, means, covariances, num_resets
 
 
-def get_last_moving_average(values, n=3) :
+def get_last_moving_average(values, n=3):
     n = min(n, len(values))
     cum = np.concatenate([[0], np.cumsum(values, dtype=float)])
     return (cum[-1] - cum[-n - 1]) / n
 
 
-def em(data, num_components, max_num_iterations, batch_size=None, step_size=1.0, shuffle_per_iteration=True):
+def em(data, num_components, max_num_iterations, seed=42, batch_size=None, step_size=1.0, shuffle_per_iteration=True):
     """
     Performs EM algorithm for parameter learning of a Gaussian Mixture Models with fixed and given number of
     components. An early stopping is performed if the objective function converges before the number of iterations set.
@@ -131,12 +134,16 @@ def em(data, num_components, max_num_iterations, batch_size=None, step_size=1.0,
     :param num_components: number of components
     :param max_num_iterations: maximum number of iterations. The algorithm can stop early if the objective function
     converges.
+    :param seed: random seed
     :param batch_size: batch size. If not set, it's defined as the size of the data set
     :param step_size: weight of the moving average for parameter update
     :param shuffle_per_iteration: whether the data should be shuffled at every iteration
     :return: a tuple containing the final mixture_weights, means, covariances, responsibilities and the
     log_likelihoods at every iteration of the algorithm.
     """
+
+    random.seed(seed)
+    np.random.seed(seed)
 
     num_points = data.shape[0]
     batch_size = batch_size if batch_size else num_points
@@ -147,9 +154,11 @@ def em(data, num_components, max_num_iterations, batch_size=None, step_size=1.0,
     mixture_weights, means, covariances, responsibilities = None, None, None, None
     prev_log_likelihood = 0
     log_likelihoods = []
+    total_num_resets = 0
     num_batches = int(num_points / batch_size)
+    iter_desc = ''
 
-    for i in range(max_num_iterations):
+    for i in tqdm(range(max_num_iterations), desc=iter_desc):
         shuffled_data = data
         if shuffle_per_iteration:
             np.random.shuffle(shuffled_data)
@@ -158,24 +167,34 @@ def em(data, num_components, max_num_iterations, batch_size=None, step_size=1.0,
             batch = shuffled_data[b * batch_size:(b + 1) * batch_size, :]
 
             if not initialized:
-                (mixture_weights, means, covariances) = random_initialization(batch, num_components)
+                curr_state = random.getstate()
+                curr_np_state = np.random.get_state()
+                random.seed(seed)
+                np.random.seed(seed)
+
+                (mixture_weights, means, covariances) = random_initialization(batch, num_components, seed)
                 prev_log_likelihood = get_log_likelihood(data, mixture_weights, means, covariances)
                 log_likelihoods.append(prev_log_likelihood)
                 initialized = True
+
+                random.setstate(curr_state)
+                np.random.set_state(curr_np_state)
 
             # E step
             responsibilities = update_responsibilities(batch, mixture_weights, means, covariances)
 
             # M step
-            (mixture_weights, means, covariances) = update_parameters(batch, mixture_weights, means, covariances,
-                                                                      responsibilities, step_size)
+            (mixture_weights, means, covariances, num_resets) = update_parameters(batch, mixture_weights, means,
+                                                                              covariances, responsibilities, step_size)
+            total_num_resets += num_resets
 
         # Log-likelihood
         log_likelihood = get_log_likelihood(data, mixture_weights, means, covariances)
         log_likelihoods.append(log_likelihood)
         avg_log_likelihood = get_last_moving_average(log_likelihoods, MOVING_AVERAGE_WINDOW)
         diff_log_likelihood = np.abs(prev_log_likelihood - avg_log_likelihood)
-        print('LL = {:.6f} - avg = {:.6f} - diff = {}'.format(log_likelihood, avg_log_likelihood, diff_log_likelihood))
+        iter_desc = 'LL = {:.6f} - avg = {:.6f} - diff = {}'.format(log_likelihood, avg_log_likelihood,
+                                                                    diff_log_likelihood)
 
         if len(log_likelihoods) > MOVING_AVERAGE_WINDOW and diff_log_likelihood <= CONVERGENCE_ERROR:
             # Convergence achieved
@@ -184,58 +203,8 @@ def em(data, num_components, max_num_iterations, batch_size=None, step_size=1.0,
         else:
             prev_log_likelihood = avg_log_likelihood
 
-    return mixture_weights, means, covariances, responsibilities, log_likelihoods
+    return mixture_weights, means, covariances, responsibilities, log_likelihoods, total_num_resets
 
 
-def plot_gmm_estimate(samples_per_component, means, covariances):
-    plot_true_gmm(samples_per_component)
-    num_components = len(samples_per_component)
-    for component in range(num_components):
-        plot_ellipse(means[component], covariances[component], plt.gca(), 2)
 
 
-def plot_log_likelihood(log_likelihoods):
-    iterations = list(range(len(log_likelihoods)))
-    plt.plot(iterations, log_likelihoods)
-    plt.xlabel('iterations')
-    plt.ylabel('log-likelihood')
-
-
-# def plot_responsibilities(data, responsibilities):
-#     num_components = responsibilities.shape[1]
-#     num_points = data.shape[0]
-#
-#     allocations = np.argmax(responsibilities, axis=1)
-#     alphas = np.max(responsibilities, axis=1)
-#     samples_per_component = [[] for _ in range(num_components)]
-#     alphas_per_component = [[] for _ in range(num_components)]
-#
-#     # Split samples into their respective components according to the responsibilities
-#     for n in range(num_points):
-#         allocation = allocations[n]
-#         samples_per_component[allocation].append(data[n])
-#         alphas_per_component[allocation].append(alphas[n])
-#
-#     def scatter(x, y, color, alpha_arr, **kwarg):
-#         r, g, b = to_rgb(color)
-#         color = [(r, g, b, alpha) for alpha in alpha_arr]
-#         plt.scatter(x, y, c=color, **kwarg)
-#
-#     # Plot points in each component and apply an alpha proportional to their responsibilities in the
-#     # associated component.
-#     colors = plt.cm.get_cmap('jet', num_components)
-#     for component in range(num_components):
-#         if len(samples_per_component[component]) > 0:
-#             samples = np.array(samples_per_component[component])
-#             scatter(samples[:, 0], samples[:, 1], colors(component), alphas_per_component[component], s=1)
-
-
-if __name__ == '__main__':
-    datax, samples_per_componentx = get_data_model_3(1000)
-    num_componentsx = len(samples_per_componentx)
-    (mixture_weightsx, meansx, covariancesx, responsibilitiesx, log_likelihoodsx) = em(datax, num_componentsx, 200,
-                                                                                       100, 0.9)
-    plot_gmm_estimate(samples_per_componentx, meansx, covariancesx)
-    plt.show()
-    plot_log_likelihood(log_likelihoodsx)
-    plt.show()
