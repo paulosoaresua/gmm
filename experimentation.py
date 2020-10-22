@@ -13,36 +13,48 @@ tex_figure = TexFigure('./images')
 
 
 def plot_and_save_data():
-    _, means, covariances = get_parameters_model_1()
-    samples, samples_per_component = get_data_model_1(NUM_SAMPLES)
-    plot_and_save_samples_per_components(tex_figure, 'true_gmm_m1.pdf', means, covariances, samples_per_component)
-    plot_and_save_samples(tex_figure, 'samples_m1.pdf', samples)
+    """
+    Generates samples from each model and saves their plots in a 2d-Euclidean space.
+    :return:
+    """
 
-    _, means, covariances = get_parameters_model_2()
-    samples, samples_per_component = get_data_model_2(NUM_SAMPLES)
-    plot_and_save_samples_per_components(tex_figure, 'true_gmm_m2.pdf', means, covariances, samples_per_component)
-    plot_and_save_samples(tex_figure, 'samples_m2.pdf', samples)
-
-    _, means, covariances = get_parameters_model_3()
-    samples, samples_per_component = get_data_model_3(NUM_SAMPLES)
-    plot_and_save_samples_per_components(tex_figure, 'true_gmm_m3.pdf', means, covariances, samples_per_component)
-    plot_and_save_samples(tex_figure, 'samples_m3.pdf', samples)
+    for model_id in Model.__members__.values():
+        _, means, covariances = get_parameters(model_id)
+        samples, samples_per_component = get_data(model_id, NUM_SAMPLES)
+        plot_and_save_samples_per_components(tex_figure, 'true_gmm_m{}.pdf'.format(model_id.value), means,
+                                             covariances, samples_per_component)
+        plot_and_save_samples(tex_figure, 'samples_m{}.pdf'.format(model_id.value), samples)
 
 
-def run_batch_em():
-    i_max = 500
-
-    print('Global Optimum')
-    run_batch_em_m1('batch_em_global', i_max)
-    run_batch_em_m2('batch_em_global', i_max)
-    run_batch_em_m3('batch_em_global', i_max)
-
-    print('\nLocal Optimum')
-    run_batch_em_m2('batch_em_local', i_max, 1)
-    run_batch_em_m3('batch_em_local', i_max, 1)
+def mse(estimated_value, true_value):
+    """
+    Computes the mean squared error between an estimated parameter and its true value
+    :param estimated_value: estimated parameter (e.g. mean, covariance)
+    :param true_value: true value of the parameter
+    :return: mean squared error
+    """
+    return np.sum((estimated_value - true_value) ** 2) / len(estimated_value[:])
 
 
-def run_batch_em_m1(filename_prefix, i_max, seed=42):
+def run_single_batch_em(models, num_components, filename_prefix, i_max, seed=42):
+    for i, model_id in enumerate(models):
+        if i > 0:
+            print('\n')
+        print('Model {}'.format(model_id.value))
+
+        k = num_components[i]
+        data, samples_per_component = get_data(model_id, NUM_SAMPLES)
+        true_mixture_weights, true_means, true_covariances = get_parameters(model_id)
+        true_log_likelihood = get_log_likelihood(data, true_mixture_weights, true_means, true_covariances)
+        (mixture_weights, means, covariances, _, log_likelihoods, num_resets) = em(data, k, i_max, seed)
+        plot_and_save_log_likelihoods(tex_figure, '{}_ll_m{}.pdf'.format(filename_prefix, model_id.value),
+                                      [log_likelihoods], true_log_likelihood, ['Batch EM'])
+        plot_and_save_samples_per_components(tex_figure, '{}_gmm_m{}.pdf'.format(filename_prefix, model_id.value),
+                                             means, covariances, samples_per_component)
+        print('#resets = {}'.format(num_resets))
+
+
+def run_batch_em_per_model(filename_prefix, i_max, num_runs=1, seed=42):
     print('\nModel 1')
     data, samples_per_component = get_data_model_1(NUM_SAMPLES)
     true_mixture_weights, true_means, true_covariances = get_parameters_model_1()
@@ -318,7 +330,7 @@ def test_mb_em_on_held_out_data():
     print('\nModel 3')
     _, samples_per_component = get_data_model_3(NUM_SAMPLES)
     parameters = get_parameters_model_3()
-    test_em_on_held_out_data(samples_per_component, parameters, 'm3', i_max, 100, 0.5, 50)  #100 is the best
+    test_em_on_held_out_data(samples_per_component, parameters, 'm3', i_max, 100, 0.5, 50)  # 100 is the best
 
 
 def test_em_on_held_out_data(samples_per_component, true_parameters, model_id, i_max, batch_size=None, step_size=1.0,
@@ -364,4 +376,7 @@ if __name__ == '__main__':
     # run_mb_em_step_size_check()
     # run_em_vs_mb_em()
     # test_batch_em_on_held_out_data()
-    test_mb_em_on_held_out_data()
+    # test_mb_em_on_held_out_data()
+    num_components = [NUM_COMPONENTS_M1, NUM_COMPONENTS_M2, NUM_COMPONENTS_M3]
+    # run_single_batch_em(Model.__members__.values(), num_components, "test", 500)
+    run_single_batch_em([Model.M2], [NUM_COMPONENTS_M2], "test", 500, 42)

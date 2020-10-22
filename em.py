@@ -19,12 +19,14 @@ def random_initialization(data, num_components, seed=None):
     """
 
     dim = data.shape[1]
-    num_points = data.shape[0]
     alpha = np.ones(num_components)
     mixture_weights = dirichlet.rvs(alpha, size=1, random_state=seed)[0]
-    sample_indices = np.random.choice(num_points, size=num_components, replace=False)
-    means = [data[idx] for idx in sample_indices]
-    covariances = [np.diag(np.random.rand(dim)) for _ in range(num_components)]
+    min_values = np.min(data, axis=0)
+    max_values = np.max(data, axis=0)
+    # Means are generated randomly within the data range
+    means = list((max_values - min_values) * np.random.rand(num_components, dim) + min_values)
+    covariances = [0.25*np.diag(np.abs((max_values - min_values) * np.random.rand(2) + min_values)) for _ in range(
+            num_components)]
 
     return mixture_weights, means, covariances
 

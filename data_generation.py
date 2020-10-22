@@ -4,6 +4,13 @@ import random
 from tex_figure import *
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
+from enum import Enum
+
+
+class Model(Enum):
+    M1 = 1
+    M2 = 2
+    M3 = 3
 
 
 def generate_samples(num_samples, mixture_weights, means, covariances):
@@ -30,6 +37,23 @@ def generate_samples(num_samples, mixture_weights, means, covariances):
         samples_per_component[component] = np.array(samples_per_component[component])
 
     return samples_per_component
+
+
+def get_parameters(model):
+    """
+    Returns the true parameters of a given model.
+
+    :param model: Model ID.
+    :return: Mixture weights, means and covariances.
+    """
+    if model == Model.M1:
+        return get_parameters_model_1()
+    elif model == Model.M2:
+        return get_parameters_model_2()
+    elif model == Model.M3:
+        return get_parameters_model_3()
+
+    return None
 
 
 def get_parameters_model_1():
@@ -106,6 +130,25 @@ def get_parameters_model_3():
                    covariance8]
 
     return mixture_weights, means, covariances
+
+
+def get_data(model, num_samples, seed=42):
+    """
+    Generates random samples from a given model.
+
+    :param model: Model ID.
+    :param num_samples: Number of samples to generate.
+    :param seed: Random seed.
+    :return: Tuple of (samples, samples by component)
+    """
+    if model == Model.M1:
+        return get_data_model_1(num_samples, seed)
+    elif model == Model.M2:
+        return get_data_model_2(num_samples, seed)
+    elif model == Model.M3:
+        return get_data_model_3(num_samples, seed)
+
+    return None
 
 
 def get_data_model_1(num_samples, seed=42):
