@@ -26,14 +26,18 @@ def plot_and_save_data():
         plot_and_save_samples(tex_figure, 'samples_m{}.pdf'.format(model_id.value), samples)
 
 
-def mse(estimated_value, true_value):
+def get_rmse(estimated_value, true_value):
     """
-    Computes the mean squared error between an estimated parameter and its true value
+    Computes the root mean square error between an estimated parameter and its true value.
+
     :param estimated_value: estimated parameter (e.g. mean, covariance)
     :param true_value: true value of the parameter
     :return: mean squared error
     """
-    return np.sum((estimated_value - true_value) ** 2) / len(estimated_value[:])
+    n = len(estimated_value[:]) if isinstance(estimated_value, np.ndarray) else 1
+    rmse = np.sqrt(np.sum((estimated_value - true_value) ** 2) / n)
+
+    return rmse
 
 
 def run_single_batch_em(models, num_components, filename_prefix, i_max, seed=42):
@@ -54,43 +58,79 @@ def run_single_batch_em(models, num_components, filename_prefix, i_max, seed=42)
         print('#resets = {}'.format(num_resets))
 
 
-def run_batch_em_per_model(filename_prefix, i_max, num_runs=1, seed=42):
-    print('\nModel 1')
-    data, samples_per_component = get_data_model_1(NUM_SAMPLES)
-    true_mixture_weights, true_means, true_covariances = get_parameters_model_1()
-    true_log_likelihood = get_log_likelihood(data, true_mixture_weights, true_means, true_covariances)
-    (mixture_weights, means, covariances, _, log_likelihoods, num_resets) = em(data, NUM_COMPONENTS_M1, i_max, seed)
-    plot_and_save_log_likelihoods(tex_figure, '{}_ll_m1.pdf'.format(filename_prefix), [log_likelihoods],
-                                  true_log_likelihood, ['Batch EM'])
-    plot_and_save_samples_per_components(tex_figure, '{}_gmm_m1.pdf'.format(filename_prefix), means, covariances,
-                                         samples_per_component)
-    print('#resets = {}'.format(num_resets))
+def run_multi_batch_em(models, num_components, filename_prefix, i_max, num_runs, seed=42):
+    for i, model_id in enumerate(models):
+        if i > 0:
+            print('\n')
+        print('Model {}'.format(model_id.value))
 
+        k = num_components[i]
 
-def run_batch_em_m2(filename_prefix, i_max, seed=42):
-    print('\nModel 2')
-    data, samples_per_component = get_data_model_2(NUM_SAMPLES)
-    true_mixture_weights, true_means, true_covariances = get_parameters_model_2()
-    true_log_likelihood = get_log_likelihood(data, true_mixture_weights, true_means, true_covariances)
-    (mixture_weights, means, covariances, _, log_likelihoods, num_resets) = em(data, NUM_COMPONENTS_M2, i_max, seed)
-    plot_and_save_log_likelihoods(tex_figure, '{}_ll_m2.pdf'.format(filename_prefix), [log_likelihoods],
-                                  true_log_likelihood, ['Batch EM'])
-    plot_and_save_samples_per_components(tex_figure, '{}_gmm_m2.pdf'.format(filename_prefix), means, covariances,
-                                         samples_per_component)
-    print('#resets = {}'.format(num_resets))
+        rmse_mixture_weight_per_component = np.zeros(k)
+        rmse_mean_per_component = np.zeros(k)
+        rmse_cov_per_component = np.zeros(k)
 
+        data, samples_per_component = get_data(model_id, NUM_SAMPLES)
 
-def run_batch_em_m3(filename_prefix, i_max, seed=42):
-    print('\nModel 3')
-    data, samples_per_component = get_data_model_3(NUM_SAMPLES)
-    true_mixture_weights, true_means, true_covariances = get_parameters_model_3()
-    true_log_likelihood = get_log_likelihood(data, true_mixture_weights, true_means, true_covariances)
-    (mixture_weights, means, covariances, _, log_likelihoods, num_resets) = em(data, NUM_COMPONENTS_M3, i_max, seed)
-    plot_and_save_log_likelihoods(tex_figure, '{}_ll_m3.pdf'.format(filename_prefix), [log_likelihoods],
-                                  true_log_likelihood, ['Batch EM'])
-    plot_and_save_samples_per_components(tex_figure, '{}_gmm_m3.pdf'.format(filename_prefix), means, covariances,
-                                         samples_per_component)
-    print('#resets = {}'.format(num_resets))
+        random.seed(seed)
+        np.random.seed(seed)
+
+        min_error = np.finfo(np.float).max
+        max_ll = np.finfo(np.float).min
+        smallest_rmse_means, smallest_rmse_covariances = None, None
+        highest_ll_means, highest_ll_covariances = None, None
+        best_rmse_run = 0
+        best_ll_run = 0
+
+        for run in range(num_runs):
+            true_mixture_weights, true_means, true_covariances = get_parameters(model_id)
+            (mixture_weights, means, covariances, _, ll, _) = em(data, k, i_max, None)
+
+            # To compare the estimations with the true values, we need to define some ordering as clusters can be
+            # permuted. We order the components by their means.
+            estimated_comp_order = [idx for idx, _ in
+                                    sorted(zip(range(k), means), key=lambda x: (x[1][0], x[1][1]))]
+            true_comp_order = [idx for idx, _ in
+                               sorted(zip(range(k), true_means), key=lambda x: (x[1][0], x[1][1]))]
+
+            for j, component in enumerate(range(k)):
+                estimated_comp_idx = estimated_comp_order[j]
+                true_comp_idx = true_comp_order[j]
+
+                rmse_mixture_weight_per_component[component] += get_rmse(mixture_weights[estimated_comp_idx],
+                                                                         true_mixture_weights[true_comp_idx])
+                rmse_mean_per_component[component] += get_rmse(means[estimated_comp_idx], true_means[true_comp_idx])
+                rmse_cov_per_component[component] += get_rmse(covariances[estimated_comp_idx],
+                                                              true_covariances[true_comp_idx])
+
+            # Choose components with better alignment than spread
+            total_error = 0.7*np.sum(rmse_mean_per_component) + 0.3*np.sum(rmse_cov_per_component)
+            if total_error < min_error:
+                min_error = total_error
+                smallest_rmse_means = means
+                smallest_rmse_covariances = covariances
+                best_rmse_run = run
+
+            if ll[-1] > max_ll:
+                max_ll = ll[-1]
+                highest_ll_means = means
+                highest_ll_covariances = covariances
+                best_ll_run = run
+
+        plot_and_save_samples_per_components(tex_figure, 'smallest_rmse_gmm_m{}.pdf'.format(model_id.value),
+                                             smallest_rmse_means, smallest_rmse_covariances, samples_per_component)
+        plot_and_save_samples_per_components(tex_figure, 'highest_ll_gmm_m{}.pdf'.format(model_id.value),
+                                             highest_ll_means, highest_ll_covariances, samples_per_component)
+
+        rmse_mixture_weight_per_component /= num_runs
+        rmse_mean_per_component /= num_runs
+        rmse_cov_per_component /= num_runs
+
+        print('Best RMSE run = {}'.format(best_rmse_run))
+        print('Best LL run = {}'.format(best_ll_run))
+        print(rmse_mixture_weight_per_component)
+        print(rmse_mean_per_component)
+        print(rmse_cov_per_component)
 
 
 def run_mb_em_mini_batch_size_check():
@@ -379,4 +419,5 @@ if __name__ == '__main__':
     # test_mb_em_on_held_out_data()
     num_components = [NUM_COMPONENTS_M1, NUM_COMPONENTS_M2, NUM_COMPONENTS_M3]
     # run_single_batch_em(Model.__members__.values(), num_components, "test", 500)
-    run_single_batch_em([Model.M2], [NUM_COMPONENTS_M2], "test", 500, 42)
+    # run_single_batch_em([Model.M2], [NUM_COMPONENTS_M2], "test", 500, 1)
+    run_multi_batch_em(Model.__members__.values(), num_components, "test", 500, 20)

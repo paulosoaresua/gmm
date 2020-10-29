@@ -3,7 +3,10 @@ from scipy.stats import dirichlet, multivariate_normal
 from data_generation import *
 from matplotlib.colors import to_rgb
 from tqdm import tqdm
+import math
 
+LOG_EPSILON = 10E-10
+MIN_VARIANCE = 10E-3
 CONVERGENCE_ERROR = 10E-5
 MOVING_AVERAGE_WINDOW = 3
 
@@ -25,8 +28,8 @@ def random_initialization(data, num_components, seed=None):
     max_values = np.max(data, axis=0)
     # Means are generated randomly within the data range
     means = list((max_values - min_values) * np.random.rand(num_components, dim) + min_values)
-    covariances = [0.25*np.diag(np.abs((max_values - min_values) * np.random.rand(2) + min_values)) for _ in range(
-            num_components)]
+    covariances = [0.25 * np.diag(np.abs((max_values - min_values) * np.random.rand(2) + min_values)) for _ in range(
+        num_components)]
 
     return mixture_weights, means, covariances
 
@@ -69,11 +72,11 @@ def update_responsibilities(data, mixture_weights, means, covariances):
 
     responsibilities = np.zeros((num_points, num_components))
     for component in range(num_components):
-        responsibilities[:, component] = mixture_weights[component] * multivariate_normal.pdf(data,
-                                                                                              means[component],
-                                                                                              covariances[
-                                                                                                  component])
+        responsibilities[:, component] = np.log(mixture_weights[component] + LOG_EPSILON) + np.log(
+            multivariate_normal.pdf(data, means[component], covariances[component]) + LOG_EPSILON)
     # Normalize each row so the responsibility for over components sum up to one for any data point
+    responsibilities = responsibilities - np.max(responsibilities, axis=1)[:, None]
+    responsibilities = np.exp(responsibilities)
     responsibilities = responsibilities / np.sum(responsibilities, axis=1)[:, None]
 
     return responsibilities
@@ -103,12 +106,13 @@ def update_parameters(data, curr_mixture_weights, curr_means, curr_covariances, 
     for component in range(num_components):
         n_k = np.sum(responsibilities[:, component])
         if n_k == 0:
-            new_mean = data[np.random.randint(num_points)]
-            new_covariance = np.diag(data_range)
+            new_mean = curr_means[component]
+            new_covariance = curr_covariances[component]
             num_resets += 1
         else:
             new_mean = np.sum(responsibilities[:, component][:, None] * data, axis=0) / n_k
-            new_covariance = np.zeros((dim, dim))
+            # The variance is at least MIN_VARIANCE to avoid singularities
+            new_covariance = np.diag([MIN_VARIANCE, MIN_VARIANCE])
             for n in range(num_points):
                 u = data[n, :] - new_mean
                 new_covariance += responsibilities[n, component] * u[:, None].dot(u[None, :])
@@ -122,6 +126,9 @@ def update_parameters(data, curr_mixture_weights, curr_means, curr_covariances, 
 
 
 def get_last_moving_average(values, n=3):
+    if len(values) == 0:
+        return 0
+
     n = min(n, len(values))
     cum = np.concatenate([[0], np.cumsum(values, dtype=float)])
     return (cum[-1] - cum[-n - 1]) / n
@@ -147,66 +154,53 @@ def em(data, num_components, max_num_iterations, seed=42, batch_size=None, step_
     random.seed(seed)
     np.random.seed(seed)
 
-    num_points = data.shape[0]
-    batch_size = batch_size if batch_size else num_points
-    # (mixture_weights, means, covariances) = random_initialization(data, num_components)
-    # responsibilities = update_responsibilities(data, mixture_weights, means, covariances)
-
-    initialized = False
-    mixture_weights, means, covariances, responsibilities = None, None, None, None
-    prev_log_likelihood = 0
+    (mixture_weights, means, covariances) = random_initialization(data, num_components)
+    responsibilities = update_responsibilities(data, mixture_weights, means, covariances)
     log_likelihoods = []
     total_num_resets = 0
-    num_batches = int(num_points / batch_size)
     iter_desc = ''
 
     for i in tqdm(range(max_num_iterations), desc=iter_desc):
+        # Log-likelihood
+        log_likelihood = get_log_likelihood(data, mixture_weights, means, covariances)
+        avg_log_likelihood = get_last_moving_average(log_likelihoods, MOVING_AVERAGE_WINDOW)
+        diff_log_likelihood = np.abs(log_likelihood - avg_log_likelihood)
+        iter_desc = 'LL = {:.6f} - avg = {:.6f} - diff = {}'.format(log_likelihood, avg_log_likelihood,
+                                                                    diff_log_likelihood)
+        log_likelihoods.append(log_likelihood)
+
         shuffled_data = data
         if shuffle_per_iteration:
             np.random.shuffle(shuffled_data)
 
-        for b in range(num_batches):
-            batch = shuffled_data[b * batch_size:(b + 1) * batch_size, :]
+        if len(log_likelihoods) > MOVING_AVERAGE_WINDOW and diff_log_likelihood <= \
+                CONVERGENCE_ERROR:
+            # Convergence achieved
+            break
 
-            if not initialized:
-                curr_state = random.getstate()
-                curr_np_state = np.random.get_state()
-                random.seed(seed)
-                np.random.seed(seed)
-
-                (mixture_weights, means, covariances) = random_initialization(batch, num_components, seed)
-                prev_log_likelihood = get_log_likelihood(data, mixture_weights, means, covariances)
-                log_likelihoods.append(prev_log_likelihood)
-                initialized = True
-
-                random.setstate(curr_state)
-                np.random.set_state(curr_np_state)
-
+        for batch in batches(shuffled_data, batch_size):
             # E step
             responsibilities = update_responsibilities(batch, mixture_weights, means, covariances)
 
             # M step
             (mixture_weights, means, covariances, num_resets) = update_parameters(batch, mixture_weights, means,
-                                                                              covariances, responsibilities, step_size)
+                                                                                  covariances, responsibilities,
+                                                                                  step_size)
             total_num_resets += num_resets
-
-        # Log-likelihood
-        log_likelihood = get_log_likelihood(data, mixture_weights, means, covariances)
-        log_likelihoods.append(log_likelihood)
-        avg_log_likelihood = get_last_moving_average(log_likelihoods, MOVING_AVERAGE_WINDOW)
-        diff_log_likelihood = np.abs(prev_log_likelihood - avg_log_likelihood)
-        iter_desc = 'LL = {:.6f} - avg = {:.6f} - diff = {}'.format(log_likelihood, avg_log_likelihood,
-                                                                    diff_log_likelihood)
-
-        if len(log_likelihoods) > MOVING_AVERAGE_WINDOW and diff_log_likelihood <= CONVERGENCE_ERROR:
-            # Convergence achieved
-            print('Converged after {} iterations.'.format(i + 1))
-            break
-        else:
-            prev_log_likelihood = avg_log_likelihood
 
     return mixture_weights, means, covariances, responsibilities, log_likelihoods, total_num_resets
 
 
+def batches(data, batch_size):
+    """
+    Yields sequential batches of data.
 
-
+    :param data: shuffled data
+    :param batch_size: number of data points per batch
+    :return:
+    """
+    num_points = data.shape[0]
+    batch_size = batch_size if batch_size else num_points
+    num_batches = math.ceil(num_points / batch_size)
+    for i in range(0, num_points, batch_size):
+        yield data[i:i + batch_size]
