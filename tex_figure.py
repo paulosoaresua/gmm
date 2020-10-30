@@ -28,6 +28,7 @@ class TexFigure:
           - filename [string]: name and extension of the image to be saved.
         """
         plt.savefig(os.path.join(self.output_dir, filename))
+        plt.close()
 
     def new_figure(self):
         plt.figure(figsize=self._get_figsize(self.latex_doc_column_width, wf=1.0))

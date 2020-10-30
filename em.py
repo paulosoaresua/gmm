@@ -96,19 +96,16 @@ def update_parameters(data, curr_mixture_weights, curr_means, curr_covariances, 
 
     num_components = responsibilities.shape[1]
     num_points = data.shape[0]
-    dim = data.shape[1]
-    data_range = np.max(data, axis=0) - np.min(data, axis=0)
 
     mixture_weights = np.sum(responsibilities, axis=0) / num_points
     means = []
     covariances = []
-    num_resets = 0
     for component in range(num_components):
         n_k = np.sum(responsibilities[:, component])
         if n_k == 0:
+            # Don't change the parameters of empty components
             new_mean = curr_means[component]
             new_covariance = curr_covariances[component]
-            num_resets += 1
         else:
             new_mean = np.sum(responsibilities[:, component][:, None] * data, axis=0) / n_k
             # The variance is at least MIN_VARIANCE to avoid singularities
@@ -122,7 +119,7 @@ def update_parameters(data, curr_mixture_weights, curr_means, curr_covariances, 
         means.append(step_size * new_mean + (1 - step_size) * curr_means[component])
         covariances.append(step_size * new_covariance + (1 - step_size) * curr_covariances[component])
 
-    return mixture_weights, means, covariances, num_resets
+    return mixture_weights, means, covariances
 
 
 def get_last_moving_average(values, n=3):
@@ -157,24 +154,21 @@ def em(data, num_components, max_num_iterations, seed=42, batch_size=None, step_
     (mixture_weights, means, covariances) = random_initialization(data, num_components)
     responsibilities = update_responsibilities(data, mixture_weights, means, covariances)
     log_likelihoods = []
-    total_num_resets = 0
-    iter_desc = ''
+    prev_avg_ll = 0
 
-    for i in tqdm(range(max_num_iterations), desc=iter_desc):
+    for _ in tqdm(range(max_num_iterations)):
         # Log-likelihood
-        log_likelihood = get_log_likelihood(data, mixture_weights, means, covariances)
-        avg_log_likelihood = get_last_moving_average(log_likelihoods, MOVING_AVERAGE_WINDOW)
-        diff_log_likelihood = np.abs(log_likelihood - avg_log_likelihood)
-        iter_desc = 'LL = {:.6f} - avg = {:.6f} - diff = {}'.format(log_likelihood, avg_log_likelihood,
-                                                                    diff_log_likelihood)
-        log_likelihoods.append(log_likelihood)
+        ll = get_log_likelihood(data, mixture_weights, means, covariances)
+        log_likelihoods.append(ll)
+        avg_ll = get_last_moving_average(log_likelihoods, MOVING_AVERAGE_WINDOW)
+        diff_ll = np.abs(avg_ll - prev_avg_ll)
+        prev_avg_ll = avg_ll
 
         shuffled_data = data
         if shuffle_per_iteration:
             np.random.shuffle(shuffled_data)
 
-        if len(log_likelihoods) > MOVING_AVERAGE_WINDOW and diff_log_likelihood <= \
-                CONVERGENCE_ERROR:
+        if diff_ll <= CONVERGENCE_ERROR:
             # Convergence achieved
             break
 
@@ -183,12 +177,11 @@ def em(data, num_components, max_num_iterations, seed=42, batch_size=None, step_
             responsibilities = update_responsibilities(batch, mixture_weights, means, covariances)
 
             # M step
-            (mixture_weights, means, covariances, num_resets) = update_parameters(batch, mixture_weights, means,
-                                                                                  covariances, responsibilities,
-                                                                                  step_size)
-            total_num_resets += num_resets
+            (mixture_weights, means, covariances) = update_parameters(batch, mixture_weights, means, covariances,
+                                                                      responsibilities,
+                                                                      step_size)
 
-    return mixture_weights, means, covariances, responsibilities, log_likelihoods, total_num_resets
+    return mixture_weights, means, covariances, responsibilities, log_likelihoods
 
 
 def batches(data, batch_size):

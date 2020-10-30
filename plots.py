@@ -114,7 +114,7 @@ def plot_and_save_log_likelihoods(tex_figure, filename, log_likelihoods_per_algo
         plt.plot(range(num_iterations), log_likelihoods, label=label)
 
     if true_log_likelihood:
-        plt.plot(range(max_iterations), [true_log_likelihood]*max_iterations, '--', label='Ground Truth')
+        plt.plot(range(max_iterations), [true_log_likelihood]*max_iterations, '--', label='True Parameters')
 
     plt.xlabel('iteration')
     plt.ylabel('log-likelihood')
@@ -125,80 +125,66 @@ def plot_and_save_log_likelihoods(tex_figure, filename, log_likelihoods_per_algo
     tex_figure.save_image(filename)
 
 
-def plot_and_save_mini_batch_size_vs_num_resets(tex_figure, filename, mini_batch_sizes, num_resets_shuffling,
-                                                num_resets_no_shuffling, step_size):
+def plot_and_save_batch_size_vs_error(tex_figure, filename, batch_sizes, errors, step_size):
     tex_figure.new_figure()
-    plt.scatter(mini_batch_sizes, num_resets_shuffling, label='shuffling')
-    plt.scatter(mini_batch_sizes, num_resets_no_shuffling, marker='x', label='no shuffling')
-    plt.xlabel('m')
-    plt.ylabel('number of parameter reset')
-    plt.xticks(mini_batch_sizes)
+    plt.plot(batch_sizes, errors, 's-')
+    plt.xlabel('batch size')
+    plt.ylabel('total error')
+    plt.xticks(batch_sizes)
     plt.title(r'$\gamma = {}$'.format(step_size))
-    plt.legend()
     tex_figure.save_image(filename)
 
 
-def plot_and_save_mini_batch_size_vs_log_likelihood(tex_figure, filename, mini_batch_sizes, log_likelihoods_shuffling,
-                                                log_likelihoods_no_shuffling, step_size):
+def plot_and_save_batch_size_vs_log_likelihood(tex_figure, filename, batch_sizes, log_likelihoods, step_size):
     tex_figure.new_figure()
-    plt.scatter(mini_batch_sizes, log_likelihoods_shuffling, label='shuffling')
-    plt.scatter(mini_batch_sizes, log_likelihoods_no_shuffling, marker='x', label='no shuffling')
-    plt.xlabel('m')
+    plt.plot(batch_sizes, log_likelihoods, 's-')
+    plt.xlabel('batch size')
     plt.ylabel('final log-likelihood')
-    plt.xticks(mini_batch_sizes)
+    plt.xticks(batch_sizes)
     plt.title(r'$\gamma = {}$'.format(step_size))
-    plt.legend()
     tex_figure.save_image(filename)
 
 
-def plot_and_save_mini_batch_size_vs_max_iter(tex_figure, filename, mini_batch_sizes, max_iter_shuffling,
-                                                max_iter_no_shuffling, step_size):
+def plot_and_save_batch_size_vs_num_iterations(tex_figure, filename, batch_sizes, num_iterations, step_size):
     tex_figure.new_figure()
-    plt.scatter(mini_batch_sizes, max_iter_shuffling, label='shuffling')
-    plt.scatter(mini_batch_sizes, max_iter_no_shuffling, marker='x', label='no shuffling')
-    plt.xlabel('m')
+    plt.plot(batch_sizes, num_iterations, 's-')
+    plt.xlabel('batch_size')
     plt.ylabel('number of iterations')
-    plt.xticks(mini_batch_sizes)
+    plt.xticks(batch_sizes)
     plt.title(r'$\gamma = {}$'.format(step_size))
-    plt.legend()
     tex_figure.save_image(filename)
 
 
-def plot_and_save_step_size_vs_num_resets(tex_figure, filename, step_sizes, num_resets_shuffling,
-                                                num_resets_no_shuffling, mini_batch_size):
+def plot_and_save_step_size_vs_error(tex_figure, filename, step_sizes, errors, batch_size):
     tex_figure.new_figure()
-    plt.scatter(step_sizes, num_resets_shuffling, label='shuffling')
-    plt.scatter(step_sizes, num_resets_no_shuffling, marker='x', label='no shuffling')
+    plt.plot(step_sizes, errors, 's-')
     plt.xlabel(r'$\gamma$')
-    plt.ylabel('number of parameter reset')
+    plt.ylabel('total error')
     plt.xticks(step_sizes)
-    plt.title('m = {}'.format(mini_batch_size))
-    plt.legend()
+    plt.title('batch_size = {}'.format(batch_size))
     tex_figure.save_image(filename)
 
 
-def plot_and_save_step_size_vs_log_likelihood(tex_figure, filename, step_sizes, log_likelihoods_shuffling,
-                                                log_likelihoods_no_shuffling, mini_batch_size):
+def plot_and_save_step_size_vs_log_likelihood(tex_figure, filename, step_sizes, log_likelihoods, batch_size):
     tex_figure.new_figure()
-    plt.scatter(step_sizes, log_likelihoods_shuffling, label='shuffling')
-    plt.scatter(step_sizes, log_likelihoods_no_shuffling, marker='x', label='no shuffling')
+    plt.plot(step_sizes, log_likelihoods, 's-')
     plt.xlabel(r'$\gamma$')
     plt.ylabel('final log-likelihood')
     plt.xticks(step_sizes)
-    plt.title('m = {}'.format(mini_batch_size))
-    plt.legend()
+    plt.title('batch_size = {}'.format(batch_size))
     tex_figure.save_image(filename)
 
 
-def plot_and_save_step_size_vs_max_iter(tex_figure, filename, step_sizes, max_iter_shuffling,
-                                                max_iter_no_shuffling, mini_batch_size):
+def plot_and_save_step_size_vs_num_iterations(tex_figure, filename, step_sizes, num_iterations, batch_size):
     tex_figure.new_figure()
-    plt.scatter(step_sizes, max_iter_shuffling, label='shuffling')
-    plt.scatter(step_sizes, max_iter_no_shuffling, marker='x', label='no shuffling')
+    plt.plot(step_sizes, num_iterations, 's-')
     plt.xlabel(r'$\gamma$')
     plt.ylabel('number of iterations')
     plt.xticks(step_sizes)
-    plt.title('m = {}'.format(mini_batch_size))
-    plt.legend()
+    plt.title('batch_size = {}'.format(batch_size))
     tex_figure.save_image(filename)
+
+
+
+
 
