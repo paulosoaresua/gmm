@@ -52,7 +52,10 @@ def get_log_likelihood(data, mixture_weights, means, covariances):
     for component in range(num_components):
         log_likelihood[:, component] = mixture_weights[component] * multivariate_normal.pdf(data, means[component],
                                                                                             covariances[component])
-    log_likelihood = np.sum(np.log(np.sum(log_likelihood, axis=1)))
+    likelihood = np.sum(log_likelihood, axis=1)
+    if np.any(likelihood <= 0):
+        breakpoint()
+    log_likelihood = np.sum(np.log(likelihood))
 
     return log_likelihood
 
@@ -67,7 +70,10 @@ def update_responsibilities(data, mixture_weights, means, covariances):
     :return: updated responsibilities per data point and component
     """
 
-    num_components = mixture_weights.size
+    if isinstance(mixture_weights, list):
+        num_components = len(mixture_weights)
+    else:
+        num_components = mixture_weights.size
     num_points = data.shape[0]
 
     responsibilities = np.zeros((num_points, num_components))
@@ -131,7 +137,8 @@ def get_last_moving_average(values, n=3):
     return (cum[-1] - cum[-n - 1]) / n
 
 
-def em(data, num_components, max_num_iterations, seed=42, batch_size=None, step_size=1.0, shuffle_per_iteration=True):
+def em(data, num_components, max_num_iterations, seed=42, batch_size=None, step_size=1.0, shuffle_per_iteration=False,
+       known_covariances=False, true_covariances=None):
     """
     Performs EM algorithm for parameter learning of a Gaussian Mixture Models with fixed and given number of
     components. An early stopping is performed if the objective function converges before the number of iterations set.
@@ -144,15 +151,24 @@ def em(data, num_components, max_num_iterations, seed=42, batch_size=None, step_
     :param batch_size: batch size. If not set, it's defined as the size of the data set
     :param step_size: weight of the moving average for parameter update
     :param shuffle_per_iteration: whether the data should be shuffled at every iteration
-    :return: a tuple containing the final mixture_weights, means, covariances, responsibilities and the
-    log_likelihoods at every iteration of the algorithm.
+    :param known_covariances: indicates whether the covariances are known beforehand
+    :param true_covariances: used if known_covariances is set to true
+    :return: a tuple containing the final mixture_weights, means, covariances, responsibilities, the
+    log_likelihoods at every iteration of the algorithm and the initial values of the parameters.
     """
 
     random.seed(seed)
     np.random.seed(seed)
 
-    (mixture_weights, means, covariances) = random_initialization(data, num_components)
+    all_params = []
+    all_resps = []
+
+    mixture_weights, means, covariances = random_initialization(data, num_components)
+    if known_covariances:
+        covariances = true_covariances
+    all_params.append((mixture_weights, means, covariances))
     responsibilities = update_responsibilities(data, mixture_weights, means, covariances)
+    all_resps.append(responsibilities)
     log_likelihoods = []
     prev_avg_ll = 0
 
@@ -177,11 +193,16 @@ def em(data, num_components, max_num_iterations, seed=42, batch_size=None, step_
             responsibilities = update_responsibilities(batch, mixture_weights, means, covariances)
 
             # M step
-            (mixture_weights, means, covariances) = update_parameters(batch, mixture_weights, means, covariances,
-                                                                      responsibilities,
-                                                                      step_size)
+            mixture_weights, means, covariances = update_parameters(batch, mixture_weights, means, covariances,
+                                                                    responsibilities, step_size)
+            if known_covariances:
+                covariances = true_covariances
 
-    return mixture_weights, means, covariances, responsibilities, log_likelihoods
+        all_params.append((mixture_weights, means, covariances))
+        all_resps.append(update_responsibilities(data, mixture_weights, means, covariances))
+
+    del all_resps[-1]
+    return mixture_weights, means, covariances, responsibilities, log_likelihoods, all_params, all_resps
 
 
 def batches(data, batch_size):

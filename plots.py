@@ -3,6 +3,7 @@ from tex_figure import *
 from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
 import numpy as np
+from matplotlib import cm
 
 
 def plot_and_save_samples_per_components(tex_figure, filename, means, covariances, samples_per_component):
@@ -104,7 +105,8 @@ def plot_samples(samples):
     plt.scatter(samples[:, 0], samples[:, 1], s=1)
 
 
-def plot_and_save_log_likelihoods(tex_figure, filename, log_likelihoods_per_algorithm, true_log_likelihood=None, labels=None):
+def plot_and_save_log_likelihoods(tex_figure, filename, log_likelihoods_per_algorithm, true_log_likelihood=None,
+                                  labels=None):
     tex_figure.new_figure()
     max_iterations = 0
     for i, log_likelihoods in enumerate(log_likelihoods_per_algorithm):
@@ -114,7 +116,7 @@ def plot_and_save_log_likelihoods(tex_figure, filename, log_likelihoods_per_algo
         plt.plot(range(num_iterations), log_likelihoods, label=label)
 
     if true_log_likelihood:
-        plt.plot(range(max_iterations), [true_log_likelihood]*max_iterations, '--', label='True Parameters')
+        plt.plot(range(max_iterations), [true_log_likelihood] * max_iterations, '--', label='True Parameters')
 
     plt.xlabel('iteration')
     plt.ylabel('log-likelihood')
@@ -185,6 +187,58 @@ def plot_and_save_step_size_vs_num_iterations(tex_figure, filename, step_sizes, 
     tex_figure.save_image(filename)
 
 
+def plot_true_vs_estimated_ll_accross_models(tex_figure, true_ll_per_model, estimated_ll_per_model, model_labels,
+                                             filename):
+    num_models = len(model_labels)
+    indices = np.arange(num_models)
+    width = 0.35
+    tex_figure.new_figure()
+
+    plt.bar(indices, true_ll_per_model, width, color='royalblue', label='True GMM')
+    plt.bar(indices + width, estimated_ll_per_model, width, color='seagreen', label='Estimated GMM')
+    plt.xticks(indices + width / 2, model_labels)
+    plt.ylabel('Neg. Log-likelihood')
+    plt.legend()
+    tex_figure.save_image(filename)
 
 
+def plot_linear_path(tex_figure, alphas, ll_initial_final_params, ll_initial_true_params, ll_final_true_params,
+                     filename):
+    tex_figure.new_figure()
+    plt.plot(alphas, ll_initial_final_params, label=r'$\theta_i \rightarrow \theta_f$')
+    plt.plot(alphas, ll_initial_true_params, marker='+', label=r'$\theta_i \rightarrow \theta^*$')
+    plt.plot(alphas, ll_final_true_params, marker='^', label=r'$\theta_f \rightarrow \theta^*$')
+    plt.xlabel(r'$\alpha$')
+    plt.ylabel('Log-likelihood')
+    plt.legend()
+    tex_figure.save_image(filename)
 
+
+def plot_linear_path_resps(tex_figure, alphas, ll_initial_final, ll_final_final, filename):
+    tex_figure.new_figure()
+    plt.plot(alphas, ll_initial_final, label=r'$\theta_1(0) \rightarrow \theta_1(T_1)$')
+    plt.plot(alphas, ll_final_final, marker='+', label=r'$\theta_2(T_2) \rightarrow \theta_1(T_1)$')
+    plt.xlabel(r'Projection')
+    plt.ylabel('Log-likelihood')
+    plt.legend()
+    tex_figure.save_image(filename)
+
+
+def plot_3d_path(tex_figure, plot_params, title, filename):
+    fig = tex_figure.new_figure()
+    ax = fig.gca(projection='3d')
+
+    colors = ['k', 'g']
+    for i, params in enumerate(plot_params):
+        if len(plot_params) < 3:
+            ax.scatter(*params[:3], marker='+', c=colors[i], depthshade=False, zorder=500)
+        else:
+            ax.scatter(*params[:3], marker='+', depthshade=False, zorder=500)
+        ax.plot_surface(*params[3:], cmap=cm.Spectral_r, zorder=1, linewidth=1)
+
+    ax.set_xlabel('Iteration')
+    ax.set_ylabel(r'Residual')
+    ax.set_zlabel('Log-likelihood')
+    ax.set_title(title)
+    plt.show()
+    tex_figure.save_image(filename)

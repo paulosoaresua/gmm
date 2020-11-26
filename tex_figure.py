@@ -31,7 +31,7 @@ class TexFigure:
         plt.close()
 
     def new_figure(self):
-        plt.figure(figsize=self._get_figsize(self.latex_doc_column_width, wf=1.0))
+        return plt.figure(figsize=self._get_figsize(self.latex_doc_column_width, wf=1.0))
 
     def _get_figsize(self, column_width, wf=0.5, hf=(5. ** 0.5 - 1.0) / 2.0, ):
         """Parameters:

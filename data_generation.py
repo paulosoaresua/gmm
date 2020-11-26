@@ -39,27 +39,29 @@ def generate_samples(num_samples, mixture_weights, means, covariances):
     return samples_per_component
 
 
-def get_parameters(model):
+def get_parameters(model, unique_variance=False):
     """
     Returns the true parameters of a given model.
 
     :param model: Model ID.
+    :param unique_variance: indicates whether the variance should be unique
     :return: Mixture weights, means and covariances.
     """
     if model == Model.M1:
-        return get_parameters_model_1()
+        return get_parameters_model_1(unique_variance)
     elif model == Model.M2:
-        return get_parameters_model_2()
+        return get_parameters_model_2(unique_variance)
     elif model == Model.M3:
-        return get_parameters_model_3()
+        return get_parameters_model_3(unique_variance)
 
     return None
 
 
-def get_parameters_model_1():
+def get_parameters_model_1(unique_variance=False):
     """
     Defines the parameters of the first model.
 
+    :param unique_variance: indicates whether the variance should be unique
     :return: parameters of the first GMM.
     """
 
@@ -72,15 +74,20 @@ def get_parameters_model_1():
     covariance3 = np.array([[0.5, 0], [0, 0.5]])
 
     means = [mean1, mean2, mean3]
-    covariances = [covariance1, covariance2, covariance3]
+
+    if unique_variance:
+        covariances = [np.eye(2), np.eye(2), np.eye(2)]
+    else:
+        covariances = [covariance1, covariance2, covariance3]
 
     return mixture_weights, means, covariances
 
 
-def get_parameters_model_2():
+def get_parameters_model_2(unique_variance=False):
     """
     Defines the parameters of the second model.
 
+    :param unique_variance: indicates whether the variance should be unique
     :return: parameters of the second GMM.
     """
 
@@ -95,15 +102,20 @@ def get_parameters_model_2():
     covariance4 = np.array([[0.125, 0], [0, 0.125]])
 
     means = [mean1, mean2, mean3, mean4]
-    covariances = [covariance1, covariance2, covariance3, covariance4]
+
+    if unique_variance:
+        covariances = [np.eye(2), np.eye(2), np.eye(2), np.eye(2)]
+    else:
+        covariances = [covariance1, covariance2, covariance3, covariance4]
 
     return mixture_weights, means, covariances
 
 
-def get_parameters_model_3():
+def get_parameters_model_3(unique_variance=False):
     """
     Defines the parameters of the third model.
 
+    :param unique_variance: indicates whether the variance should be unique
     :return: parameters of the third GMM.
     """
 
@@ -126,44 +138,50 @@ def get_parameters_model_3():
     covariance8 = np.diag([0.1, 0.1])
 
     means = [mean1, mean2, mean3, mean4, mean5, mean6, mean7, mean8]
-    covariances = [covariance1, covariance2, covariance3, covariance4, covariance5, covariance6, covariance7,
-                   covariance8]
+
+    if unique_variance:
+        covariances = [np.eye(2), np.eye(2), np.eye(2), np.eye(2), np.eye(2), np.eye(2), np.eye(2), np.eye(2)]
+    else:
+        covariances = [covariance1, covariance2, covariance3, covariance4, covariance5, covariance6, covariance7,
+                       covariance8]
 
     return mixture_weights, means, covariances
 
 
-def get_data(model, num_samples, seed=42):
+def get_data(model, num_samples, seed=42, unique_variance=False):
     """
     Generates random samples from a given model.
 
     :param model: Model ID.
     :param num_samples: Number of samples to generate.
     :param seed: Random seed.
+    :param unique_variance: indicates whether the variance should be unique
     :return: Tuple of (samples, samples by component)
     """
     if model == Model.M1:
-        return get_data_model_1(num_samples, seed)
+        return get_data_model_1(num_samples, seed, unique_variance)
     elif model == Model.M2:
-        return get_data_model_2(num_samples, seed)
+        return get_data_model_2(num_samples, seed, unique_variance)
     elif model == Model.M3:
-        return get_data_model_3(num_samples, seed)
+        return get_data_model_3(num_samples, seed, unique_variance)
 
     return None
 
 
-def get_data_model_1(num_samples, seed=42):
+def get_data_model_1(num_samples, seed=42, unique_variance=False):
     """
     Generates samples from a 2D GMM with 3 separable components.
 
     :param num_samples: number of samples to generate
     :param seed: random seed
+    :param unique_variance: indicates whether the variance should be unique
     :return: a tuple containing all the samples generated and a list of samples per component.
     """
 
     random.seed(seed)
     np.random.seed(seed)
 
-    mixture_weights, means, covariances = get_parameters_model_1()
+    mixture_weights, means, covariances = get_parameters_model_1(unique_variance)
     samples_per_component = generate_samples(num_samples, mixture_weights, means, covariances)
     all_samples = np.concatenate(samples_per_component)
     np.random.shuffle(all_samples)
@@ -171,19 +189,20 @@ def get_data_model_1(num_samples, seed=42):
     return all_samples, samples_per_component
 
 
-def get_data_model_2(num_samples, seed=42):
+def get_data_model_2(num_samples, seed=42, unique_variance=False):
     """
     Generates samples from a 2D GMM with 4 components with 3 overlapping ones.
 
     :param num_samples: number of samples to generate
     :param seed: random seed
+    :param unique_variance: indicates whether the variance should be unique
     :return: a tuple containing all the samples generated and a list of samples per component.
     """
 
     random.seed(seed)
     np.random.seed(seed)
 
-    mixture_weights, means, covariances = get_parameters_model_2()
+    mixture_weights, means, covariances = get_parameters_model_2(unique_variance)
     samples_per_component = generate_samples(num_samples, mixture_weights, means, covariances)
     all_samples = np.concatenate(samples_per_component)
     np.random.shuffle(all_samples)
@@ -191,28 +210,22 @@ def get_data_model_2(num_samples, seed=42):
     return all_samples, samples_per_component
 
 
-def get_data_model_3(num_samples, seed=42):
+def get_data_model_3(num_samples, seed=42, unique_variance=False):
     """
     Generates samples from a 2D GMM with 8 non-overlapping components organized as a ring.
 
     :param num_samples: number of samples to generate
     :param seed: random seed
+    :param unique_variance: indicates whether the variance should be unique
     :return: a tuple containing all the samples generated and a list of samples per component.
     """
 
     random.seed(seed)
     np.random.seed(seed)
 
-    mixture_weights, means, covariances = get_parameters_model_3()
+    mixture_weights, means, covariances = get_parameters_model_3(unique_variance)
     samples_per_component = generate_samples(num_samples, mixture_weights, means, covariances)
     all_samples = np.concatenate(samples_per_component)
     np.random.shuffle(all_samples)
 
     return all_samples, samples_per_component
-
-
-
-
-
-
-
